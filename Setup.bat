@@ -37,11 +37,10 @@ schtasks /delete /f /tn HeroesShareWatcher
 REM install scheduled task
 
 :Create
-echo You will have to authenticate to add the scheduled task
-pause
+echo Creating the watcher task
 
 @echo on
-schtasks /create /ru %USERNAME% /tn HeroesShareWatcher /xml "%~dp0ScheduledTask.xml"
+schtasks /create /np /tn HeroesShareWatcher /xml "%~dp0WatcherTask.xml"
 
 @echo off
-pause
+timeout /t 30 > NUL
