@@ -1,17 +1,28 @@
 @echo off
 
-REM check for elevation
-REM https://winaero.com/blog/how-to-check-in-a-batch-file-if-you-are-running-it-elevated/
-
-openfiles > NUL 2>&1
-if %ERRORLEVEL% EQU 0 goto Proceed
-echo You must Right-click and use 'Run as Administrator'
-pause
-exit
-
-:Proceed 
 echo Installing for %USERNAME%
 echo.
+
+echo Checking for and removing existing tasks
+echo .
+
+schtasks /query /tn HeroesShareWatcher > NUL 2>&1
+if %ERRORLEVEL% EQU 1 goto Check1
+
+echo Removing existing watcher task...
+schtasks /end /tn HeroesShareWatcher
+schtasks /delete /f /tn HeroesShareWatcher
+
+:Check1
+
+schtasks /query /tn HeroesShareUpdater > NUL 2>&1
+if %ERRORLEVEL% EQU 1 goto Check1
+
+echo Removing existing updater task...
+schtasks /end /tn HeroesShareUpdater
+schtasks /delete /f /tn HeroesShareUpdater
+
+:Check2
 
 echo Creating application directory...
 if not exist "%APPDATA%\Heroes Share\" mkdir "%APPDATA%\Heroes Share\"
@@ -21,26 +32,19 @@ echo Copying files...
 @echo on
 copy /y "%~dp0rejoinprotocol.exe" "%APPDATA%\Heroes Share\"
 copy /y "%~dp0watcher.ps1" "%APPDATA%\Heroes Share\"
+copy /y "%~dp0updater.ps1" "%APPDATA%\Heroes Share\"
+copy /y "%~dp0version.txt" "%APPDATA%\Heroes Share\"
+
 @echo off
 echo.
 
 
-REM check for and remove existing task
-
-schtasks /query /tn HeroesShareWatcher > NUL 2>&1
-if %ERRORLEVEL% EQU 1 goto Create
-
-echo Removing existing task...
-schtasks /end /tn HeroesShareWatcher
-schtasks /delete /f /tn HeroesShareWatcher
-
-REM install scheduled task
-
-:Create
-echo Creating the watcher task
+:Check3
+echo Creating the scheduled tasks
 
 @echo on
 schtasks /create /np /tn HeroesShareWatcher /xml "%~dp0WatcherTask.xml"
+schtasks /create /np /tn HeroesShareWatcher /xml "%~dp0UpdaterTask.xml"
 
 @echo off
 timeout /t 30 > NUL

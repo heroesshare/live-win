@@ -193,12 +193,12 @@ while($true) {
 					# Parse attribute events from the file
 					& "$Parser" --attributeevents --json "$($RejoinFile.FullName)" > "$TmpFile"
 					if ( $LastExitCode -eq 0 ) {		
-						Write-Output "Uploading attributes file... " | LogLine
-						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/events/$RandID" -Field "upload" -Path $TmpFile.FullName
+						Write-Output "Uploading attribute events file... " | LogLine
+						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/attributeevents/$RandID" -Field "upload" -Path $TmpFile.FullName
 						Write-Output $Result.Result | LogLine
 						
 					} else {
-						Write-Output "Unable to parse events from rejoin file" | LogLine
+						Write-Output "Unable to parse attribute events from rejoin file" | LogLine
 						$ParseFlag = $true
 					}
 					
