@@ -56,7 +56,7 @@ $TmpFile = New-TemporaryFile
 $client = New-Object System.Net.WebClient
 $client.DownloadFile("https://heroesshare.net/clients/update/win", $TmpFile)
 
-Write-Output "Download complete: $TmpFile"
+Write-Output "Download complete: $TmpFile" | LogLine
 
 # Get correct hash from website
 $Hash = Invoke-RestMethod -Uri "https://heroesshare.net/clients/hash/win"
