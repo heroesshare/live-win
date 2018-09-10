@@ -1,5 +1,5 @@
 #
-# Version 1.0
+# Build 1.3
 # Copyright Heroes Share
 # https://heroesshare.net
 #
@@ -97,12 +97,20 @@ if ( -not (Test-Path "$Parser" -PathType Leaf) ) {
 	exit 2
 }
 
+# Check for version.txt
+if ( -not ( Test-Path "$AppDir\version.txt" -PathType Leaf ) ) {
+	$Version = "0.0.0000"
+} else {
+	# Get local version
+	$Version = Get-Content "$AppDir\version.txt" -Raw 
+}
+
 # Record process ID
 Write-Output "$pid" > "$PidFile"
-Write-Output "Launching with process ID $Pid..." | LogLine
+Write-Output "Launching version $Version with process ID $Pid..." | LogLine
 
-$BattleLobbyPath = [System.IO.Path]::GetTempPath() + "Heroes of the Storm\"
-Write-Output "BattleLobby Path = $BattleLobbyPath" | LogLine
+$LobbyPath = [System.IO.Path]::GetTempPath() + "Heroes of the Storm\"
+Write-Output "BattleLobby Path = $LobbyPath" | LogLine
 
 $RejoinPath = [Environment]::GetFolderPath("MyDocuments") + "\Heroes of the Storm\Accounts\"
 Write-Output "Rejoin Path = $RejoinPath" | LogLine
@@ -121,36 +129,35 @@ if ( -not (Test-Path "$AppDir\LastMatch" -PathType Leaf) ) {
 
 # Main process loop
 while($true) {
-	$ReplayFile = $null
+	$LobbyFile = $null
 	$RejoinFile = $null
 
 	# make sure the directory exists (sometimes cleared between game launches)
-	if ( (Test-Path "$BattleLobbyPath" -PathType Container) ) {
+	if ( (Test-Path "$LobbyPath" -PathType Container) ) {
 		# Look for any new BattleLobby files and grab the latest one
 		Try {
-			$ReplayFile = Get-ChildItem -File -Recurse -Filter "replay.server.battlelobby" -Path $BattleLobbyPath | Where-Object {$_.LastWriteTime -gt (Get-Item -Path "$AppDir\LastMatch").LastWriteTime} | Sort-Object LastAccessTime -Descending | Select-Object -First 1
+			$LobbyFile = Get-ChildItem -File -Recurse -Filter "replay.server.battlelobby" -Path $LobbyPath | Where-Object {$_.LastWriteTime -gt (Get-Item -Path "$AppDir\LastMatch").LastWriteTime} | Sort-Object LastAccessTime -Descending | Select-Object -First 1
 		} Catch {
 			$ErrorMessage = $_.Exception.Message
 			Write-Output "Failed to watch for BattleLobby: $ErrorMessage" | LogLine
 			Start-Sleep 30
 		}
-	} else {
+	}
 	
-	}	
 	# If there was a match, post it to the server
-	if ($ReplayFile) {
-		Write-Output "Detected new battle lobby file: $($ReplayFile.FullName)" | LogLine
+	if ($LobbyFile) {
+		Write-Output "Detected new battle lobby file: $($LobbyFile.FullName)" | LogLine
 
 		# Update status
 		(Get-Item -Path "$AppDir\LastMatch").LastWriteTime = Get-Date
-
+				
 		# Get hash to check if it has been uploaded
-		$Hash = (Get-FileHash $ReplayFile.FullName -Algorithm MD5).Hash.ToLower()
-		$Result = Invoke-RestMethod -Uri "https://heroesshare.net/lives/check/$Hash"
+		$UploadHash = (Get-FileHash $LobbyFile.FullName -Algorithm MD5).Hash.ToLower()
+		$Result = Invoke-RestMethod -Uri "https://heroesshare.net/lives/check/$UploadHash"
 		
 		if ( ! "$Result" ) {
-			Write-Output "Uploading replay file with hash $Hash... " | LogLine
-			$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/battlelobby/$RandID" -Field "upload" -Path $ReplayFile.FullName
+			Write-Output "Uploading lobby file with hash $UploadHash... " | LogLine
+			$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/battlelobby/$RandID" -Field "upload" -Path $LobbyFile.FullName
 			Write-Output $Result.Result | LogLine
 
 			# Audible notification when complete
@@ -180,7 +187,7 @@ while($true) {
 					
 					# Parse details from the file
 					& "$Parser" --details --json "$($RejoinFile.FullName)" > "$TmpFile"
-					if ( $LastExitCode -eq 0 ) {		
+					if ( $LastExitCode -eq 0 ) {
 						Write-Output "Uploading details file... " | LogLine
 						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/details/$RandID" -Field "upload" -Path $TmpFile.FullName
 						Write-Output $Result.Result | LogLine
@@ -192,7 +199,7 @@ while($true) {
 					
 					# Parse attribute events from the file
 					& "$Parser" --attributeevents --json "$($RejoinFile.FullName)" > "$TmpFile"
-					if ( $LastExitCode -eq 0 ) {		
+					if ( $LastExitCode -eq 0 ) {
 						Write-Output "Uploading attribute events file... " | LogLine
 						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/attributeevents/$RandID" -Field "upload" -Path $TmpFile.FullName
 						Write-Output $Result.Result | LogLine
@@ -204,7 +211,7 @@ while($true) {
 					
 					# Parse init data from the file
 					& "$Parser" --initdata --json "$($RejoinFile.FullName)" > "$TmpFile"
-					if ( $LastExitCode -eq 0 ) {		
+					if ( $LastExitCode -eq 0 ) {
 						Write-Output "Uploading init data file... " | LogLine
 						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/initdata/$RandID" -Field "upload" -Path $TmpFile.FullName
 						Write-Output $Result.Result | LogLine
@@ -213,8 +220,7 @@ while($true) {
 						Write-Output "Unable to parse init data from rejoin file" | LogLine
 						$ParseFlag = $true
 					}
-					
-					
+
 					if ( $ParseFlag ) {
 						# Audible notification of failure
 						Play-Sound -Status "FAILURE"
@@ -222,8 +228,94 @@ while($true) {
 						# Audible notification when all complete
 						Play-Sound -Status "SUCCESS"
 					}
+
+					# Start watching for talents (until game over)
+					Write-Output "Begin watching for talents" | LogLine
+
+					$TrackerHash = $null
+					$TalentsHash = $null
+					$GameOver = 0
+
+					# Watch for up to 4 minutes at a time
+					$j = 0
+					$TrackerFile = "$($LobbyPath.parent.FullName)\replay.tracker.events"
+					while ( $j -lt 8 ) {
+						
+						# If file is gone, game is over
+						if ( -not ( Test-Path $TrackerFile -PathType Leaf ) ) {
+							Write-Output "Tracker events file no longer available; completing." | LogLine
+
+							$GameOver = 1
+							break
+						} else {
+							# Get updated hash of tracker file
+							$TmpHash = (Get-FileHash $TrackerFile.FullName -Algorithm MD5).Hash.ToLower()
+
+							# If file stayed the same, game is over
+							if ( "$TmpHash" = "$TrackerHash" ) {
+								Write-Output "No updates to tracker events file; completing." | LogLine
+								$GameOver = 1
+								break
+
+							# Game still going
+							} else {
+								# Update last hash
+								$TrackerHash = "$TmpHash"
+								
+								# Check for new talents
+								& "$Parser" --gameevents --json "$($RejoinFile.FullName)" | Select-String -Pattern "SHeroTalentTreeSelectedEvent" > "$TmpFile"
+								$TmpHash = (Get-FileHash $TmpFile.FullName -Algorithm MD5).Hash.ToLower()
+								
+								# If file was different than last run, upload it
+								if ( "$TmpHash" != "$TalentsHash" ] ) {
+									# Update last hash
+									$TalentsHash = "$TmpHash"
+
+									Write-Output "Uploading game events file... " | LogLine
+									$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/gameevents/$RandID" -Field "upload" -Path $TmpFile.FullName
+									Write-Output $Result.Result | LogLine
+									
+									# Reset the timer
+									$j = 0
+								}
+
+								# Wait a while then try again
+								j++
+								Start-Sleep 30
+							}
+						}
+					}
 					
+					if ( $GameOver -ne 1 ) {
+						Write-Output "Error: Timed out waiting for game to finish" | LogLine
+					}
+					
+					# Wait for post-game cleanup
+					Start-Sleep 10
+					
+					# check for a new replay file
+					$ReplayFile = Get-ChildItem -File -Recurse -Filter "*.StormReplay" -Path $RejoinPath | Where-Object {$_.LastWriteTime -gt (Get-Item -Path "$AppDir\LastMatch").LastWriteTime} | Sort-Object LastAccessTime -Descending | Select-Object -First 1
+
+					# if there was a match, post it to the server
+					if ( "$ReplayFile" ) {
+						Write-Output "Detected new replay file: $($ReplayFile.FullName)" | LogLine
+						Write-Output "Uploading replay file to HotsApi and HotsLogs... " | LogLine
+						$Result = Invoke-MultiPart -Uri "http://hotsapi.net/api/v1/upload?uploadToHotslogs=1" -Field "file" -Path $ReplayFile.FullName
+						Write-Output $Result.Result | LogLine
+						
+						# Audible notification when complete
+						Play-Sound -Status "SUCCESS"
+					} else {
+						Write-Output "Unable to locate replay file for recent live game!" | LogLine
+						Play-Sound -Status "FAILURE"
+					}
+					
+					# notify of completion
+					$Result = Invoke-RestMethod -Uri "https://heroesshare.net/lives/complete/$RandId"
+					
+					# clean up and pass back to main watch loop
 					Remove-Item -Force "$TmpFile"
+					$LobbyFile = ""
 					break;
 				}
 				
@@ -231,7 +323,7 @@ while($true) {
 				Start-Sleep 5
 			} #endwhile
 			
-			# check if this was a match or a timeout
+			# check if stage 2 uploads succeeded or timed out
 			if ( ! "$RejoinFile" ) {
 				Write-Output "No rejoin file found for additional upload: $RejoinPath" | LogLine
 
@@ -247,7 +339,9 @@ while($true) {
 			# Audible notification of failure
 			Play-Sound -Status "FAILURE"
 		}
-		$ReplayFile = ""
+		$LobbyFile = ""
+		
+		Write-Output "Resume watching for live games in $LobbyPath..." | LogLine
 	}
 	
 	# note this cycle
