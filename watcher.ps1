@@ -165,20 +165,25 @@ while($true) {
 			
 			
 			# Watch for new rejoin file - should be about 1 minute but wait up to 5
+			Write-Output "Waiting for rejoin file in $RejoinPath..." | LogLine
 			$i = 0
 			while ( $i -lt 60 ) {
-				Try {
-					$RejoinFile = Get-ChildItem -File -Recurse -Filter "*.StormSave" -Path $RejoinPath | Where-Object {$_.LastWriteTime -gt (Get-Item -Path "$AppDir\LastRun").LastWriteTime} | Sort-Object LastAccessTime -Descending | Select-Object -First 1
-				}  Catch {
-					$ErrorMessage = $_.Exception.Message
-					Write-Output "Failed to watch for rejoin file: $ErrorMessage" | LogLine
-					Start-Sleep 30
+				if ( (Test-Path "$RejoinPath" -PathType Container) ) {
+					Try {
+						$RejoinFile = Get-ChildItem -File -Recurse -Filter "*.StormSave" -Path $RejoinPath | Where-Object {$_.LastWriteTime -gt (Get-Item -Path "$AppDir\LastRun").LastWriteTime} | Sort-Object LastAccessTime -Descending | Select-Object -First 1
+					}  Catch {
+						$ErrorMessage = $_.Exception.Message
+						Write-Output "Failed to watch for rejoin file: $ErrorMessage" | LogLine
+						Start-Sleep 30
 		
+						$RejoinFile = $null
+					}
+				} else {
 					$RejoinFile = $null
 				}
 				
 				# If there was a match, post it to the server
-				if ($RejoinFile) {
+				if ( "$RejoinFile" ) {
 					Write-Output "Detected new rejoin file: $($RejoinFile.FullName)" | LogLine
 
 					# Grab a temp file
@@ -230,29 +235,30 @@ while($true) {
 					}
 
 					# Start watching for talents (until game over)
-					Write-Output "Begin watching for talents" | LogLine
-
 					$TrackerHash = $null
 					$TalentsHash = $null
 					$GameOver = 0
 
 					# Watch for up to 4 minutes at a time
 					$j = 0
-					$TrackerFile = "$($LobbyPath.parent.FullName)\replay.tracker.events"
+					$TrackerPath = Split-Path -Path $LobbyFile.FullName -Parent
+					$TrackerFile = Join-Path $TrackerPath "replay.tracker.events"
+
+					Write-Output "Begin watching for talents, monitoring $TrackerFile" | LogLine
 					while ( $j -lt 8 ) {
 						
 						# If file is gone, game is over
 						if ( -not ( Test-Path $TrackerFile -PathType Leaf ) ) {
-							Write-Output "Tracker events file no longer available; completing." | LogLine
+							Write-Output "Tracker events file no longer available: $TrackerFile; completing." | LogLine
 
 							$GameOver = 1
 							break
 						} else {
 							# Get updated hash of tracker file
-							$TmpHash = (Get-FileHash $TrackerFile.FullName -Algorithm MD5).Hash.ToLower()
+							$TmpHash = (Get-FileHash $TrackerFile -Algorithm MD5).Hash.ToLower()
 
 							# If file stayed the same, game is over
-							if ( "$TmpHash" = "$TrackerHash" ) {
+							if ( "$TmpHash" -eq "$TrackerHash" ) {
 								Write-Output "No updates to tracker events file; completing." | LogLine
 								$GameOver = 1
 								break
@@ -267,7 +273,7 @@ while($true) {
 								$TmpHash = (Get-FileHash $TmpFile.FullName -Algorithm MD5).Hash.ToLower()
 								
 								# If file was different than last run, upload it
-								if ( "$TmpHash" != "$TalentsHash" ] ) {
+								if ( "$TmpHash" -ne "$TalentsHash" ) {
 									# Update last hash
 									$TalentsHash = "$TmpHash"
 
@@ -280,7 +286,7 @@ while($true) {
 								}
 
 								# Wait a while then try again
-								j++
+								$j++
 								Start-Sleep 30
 							}
 						}
