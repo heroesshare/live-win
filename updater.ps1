@@ -73,8 +73,11 @@ While ( $True ) {
 	
 			exit 3
 		}
+		Write-Output "Hash verification succeeded: $Hash" | LogLine
 
 		# Expand the archive
+		Write-Output "Expanding files from $TmpFile" | LogLine
+
 		Rename-Item -Path "$TmpFile" -NewName "$($TmpFile).zip"
 		$TmpDir = Split-Path -Resolve -Path "$($TmpFile).zip"
 		Expand-Archive "$($TmpFile).zip" -DestinationPath "$TmpDir\HeroesShareLive" -Force
@@ -89,6 +92,7 @@ While ( $True ) {
 
 			exit 4
 		}
+		Write-Output "Extraction succeeded. Beginning install (this task should terminate)" | LogLine
 
 		# Run Setup.bat
 		& "$TmpDir\HeroesShareLive\Setup.bat"
