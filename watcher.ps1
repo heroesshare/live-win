@@ -1,5 +1,5 @@
 #
-# Build 1.3
+# Build 1.5
 # Copyright Heroes Share
 # https://heroesshare.net
 #
@@ -45,7 +45,7 @@ Function Play-Sound {
 	Param ([string] $Status)
 	
 	# Check for disabled sound preference
-	if ( Test-Path "$AppDir\DisableSound" -PathType Leaf) ) {
+	if ( Test-Path "$AppDir\DisableSound" -PathType Leaf ) {
 		return $True
 	}
 
