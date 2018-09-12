@@ -29,91 +29,97 @@ if ( -not ( Test-Path "$AppDir\version.txt" -PathType Leaf ) ) {
 	$Installed = Get-Content "$AppDir\version.txt" -Raw 
 }
 
-# Get latest version from the website
-$Latest = Invoke-RestMethod -Uri "https://heroesshare.net/clients/check/win"
+# Stay alive between version checks so no PowerShell window displays
+While ( $True ) {
+	# Get latest version from the website
+	$Latest = Invoke-RestMethod -Uri "https://heroesshare.net/clients/check/win"
 
-if ( -not ("$Latest") -Or "$Latest" -eq "error" ) {
-	Start-Transcript -Path "$LogFile" -Append
-	Write-Output "Error loading version from website." | LogLine
-	Stop-Transcript
+	if ( -not ("$Latest") -Or "$Latest" -eq "error" ) {
+		Start-Transcript -Path "$LogFile" -Append
+		Write-Output "Error loading version from website." | LogLine
+		Stop-Transcript
 	
-	exit 2
-}
+		exit 2
+	}
 
-# Compare versions
-if ( "$Latest" -eq "$Installed" ) {
-	exit 0
-}
+	# Compare versions
+	if ( "$Latest" -ne "$Installed" ) {
 
-# Start logging
-Start-Transcript -Path "$LogFile" -Append
+		# Start logging
+		Start-Transcript -Path "$LogFile" -Append
 
-Write-Output "Latest version $Latest differs from current $Installed" | LogLine
+		Write-Output "Latest version $Latest differs from current $Installed" | LogLine
 
-# Download latest installer
-$TmpFile = New-TemporaryFile
+		# Download latest installer
+		$TmpFile = New-TemporaryFile
 
-$client = New-Object System.Net.WebClient
-$client.DownloadFile("https://heroesshare.net/clients/update/win", $TmpFile)
+		$client = New-Object System.Net.WebClient
+		$client.DownloadFile("https://heroesshare.net/clients/update/win", $TmpFile)
 
-Write-Output "Download complete: $TmpFile" | LogLine
+		Write-Output "Download complete: $TmpFile" | LogLine
 
-# Get correct hash from website
-$Hash = Invoke-RestMethod -Uri "https://heroesshare.net/clients/hash/win"
+		# Get correct hash from website
+		$Hash = Invoke-RestMethod -Uri "https://heroesshare.net/clients/hash/win"
 
-# test it against download
-$Test = (Get-FileHash $TmpFile.FullName -Algorithm MD5).Hash.ToLower()
+		# test it against download
+		$Test = (Get-FileHash $TmpFile.FullName -Algorithm MD5).Hash.ToLower()
 
-if ( "$Test" -ne "$Hash" ) {
-	Write-Output "Hash on downloaded file is incorrect:" | LogLine
-	Write-Output "$Test versus $Hash" | LogLine
+		if ( "$Test" -ne "$Hash" ) {
+			Write-Output "Hash on downloaded file is incorrect:" | LogLine
+			Write-Output "$Test versus $Hash" | LogLine
 	
-	Remove-Item -Force "$TmpFile"
-	Stop-Transcript
+			Remove-Item -Force "$TmpFile"
+			Stop-Transcript
 	
-	exit 3
+			exit 3
+		}
+
+		# Expand the archive
+		Rename-Item -Path "$TmpFile" -NewName "$($TmpFile).zip"
+		$TmpDir = Split-Path -Resolve -Path "$($TmpFile).zip"
+		Expand-Archive "$($TmpFile).zip" -DestinationPath "$TmpDir\HeroesShareLive" -Force
+
+		Remove-Item -Force "$($TmpFile).zip"
+
+		# Verify extraction
+		if ( -not ( Test-Path "$TmpDir\HeroesShareLive\Setup.bat" -PathType Leaf ) ) {
+			Write-Output "Archive missing Setup.bat. Try a manual update:" | LogLine
+			Write-Output "https://heroesshare.net/clients/install/win" | LogLine
+			Stop-Transcript
+
+			exit 4
+		}
+
+		# Run Setup.bat
+		& "$TmpDir\HeroesShareLive\Setup.bat"
+		$Result = $LastExitCode
+
+		Remove-Item "$TmpDir\HeroesShareLive" -Force -Recurse
+
+		# Verify installer succeeded
+		if ( $Result -ne 0 ) {
+			Write-Output "Installation failed. Try a manual update:" | LogLine
+			Write-Output "https://heroesshare.net/clients/install/win" | LogLine
+			exit 5
+		}
+
+		# Confirm new version
+		$Installed = Get-Content "$AppDir\version.txt" -Raw
+		if ( "$Latest" -ne "$Installed" ) {
+			Write-Output "Installation complete but version mismatch. Try a manual update:"
+			Write-Output "https://heroesshare.net/clients/install/win"
+			exit 6
+		}
+
+		Write-Output "Installation complete! Updated to $Latest"
+
+		# Stop logging
+		Stop-Transcript
+		
+		# Exit to start a fresh copy of the script next time
+		exit 0
+	}
+
+	# check again in 30 minutes
+	Start-Sleep 1800
 }
-
-# Expand the archive
-Rename-Item -Path "$TmpFile" -NewName "$($TmpFile).zip"
-$TmpDir = Split-Path -Resolve -Path "$($TmpFile).zip"
-Expand-Archive "$($TmpFile).zip" -DestinationPath "$TmpDir\HeroesShareLive" -Force
-
-Remove-Item -Force "$($TmpFile).zip"
-
-# Verify extraction
-if ( -not ( Test-Path "$TmpDir\HeroesShareLive\Setup.bat" -PathType Leaf ) ) {
-	Write-Output "Archive missing Setup.bat. Try a manual update:" | LogLine
-	Write-Output "https://heroesshare.net/clients/install/win" | LogLine
-	Stop-Transcript
-
-	exit 4
-}
-
-# Run Setup.bat
-& "$TmpDir\HeroesShareLive\Setup.bat"
-$Result = $LastExitCode
-
-Remove-Item "$TmpDir\HeroesShareLive" -Force -Recurse
-
-# Verify installer succeeded
-if ( $Result -ne 0 ) {
-	Write-Output "Installation failed. Try a manual update:" | LogLine
-	Write-Output "https://heroesshare.net/clients/install/win" | LogLine
-	exit 5
-}
-
-# Confirm new version
-$Installed = Get-Content "$AppDir\version.txt" -Raw
-if ( "$Latest" -ne "$Installed" ) {
-	Write-Output "Installation complete but version mismatch. Try a manual update:"
-	Write-Output "https://heroesshare.net/clients/install/win"
-	exit 6
-}
-
-Write-Output "Installation complete! Updated to $Latest"
-
-# Stop logging
-Stop-Transcript
-
-exit 0

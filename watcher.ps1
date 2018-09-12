@@ -44,6 +44,11 @@ Function Invoke-MultiPart {
 Function Play-Sound {
 	Param ([string] $Status)
 	
+	# Check for disabled sound preference
+	if ( Test-Path "$AppDir\DisableSound" -PathType Leaf) ) {
+		return $True
+	}
+
 	Switch ($Status) {
 		"SUCCESS" {
 			$Path = "C:\Windows\Media\Alarm02.wav"
@@ -255,7 +260,13 @@ while($true) {
 							break
 						} else {
 							# Get updated hash of tracker file
-							$TmpHash = (Get-FileHash $TrackerFile -Algorithm MD5).Hash.ToLower()
+							Try {
+								$TmpHash = (Get-FileHash $TrackerFile -Algorithm MD5).Hash.ToLower()
+
+							# If file is in use, game is still going
+							} Catch {
+								$TmpHash = "continue"
+							}
 
 							# If file stayed the same, game is over
 							if ( "$TmpHash" -eq "$TrackerHash" ) {
