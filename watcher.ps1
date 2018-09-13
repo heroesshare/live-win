@@ -244,13 +244,13 @@ while($true) {
 					$TalentsHash = $null
 					$GameOver = 0
 
-					# Watch for up to 4 minutes at a time
+					# Watch for up to 10 minutes at a time
 					$j = 0
 					$TrackerPath = Split-Path -Path $LobbyFile.FullName -Parent
 					$TrackerFile = Join-Path $TrackerPath "replay.tracker.events"
 
 					Write-Output "Begin watching for talents, monitoring $TrackerFile" | LogLine
-					while ( $j -lt 8 ) {
+					while ( $j -lt 20 ) {
 						
 						# If file is gone, game is over
 						if ( -not ( Test-Path $TrackerFile -PathType Leaf ) ) {
@@ -265,7 +265,7 @@ while($true) {
 
 							# If file is in use, game is still going
 							} Catch {
-								$TmpHash = "continue"
+								$TmpHash = -Join ((0..9) + $Lowers + (0..9) + $Lowers + (0..9) + $Lowers | Get-Random -Count 24)
 							}
 
 							# If file stayed the same, game is over
