@@ -310,26 +310,30 @@ while($true) {
 					# Wait for post-game cleanup
 					Start-Sleep 10
 					
-					# check for a new replay file
+					# Check for a new replay file
 					$ReplayFile = Get-ChildItem -File -Recurse -Filter "*.StormReplay" -Path $RejoinPath | Where-Object {$_.LastWriteTime -gt (Get-Item -Path "$AppDir\LastMatch").LastWriteTime} | Sort-Object LastAccessTime -Descending | Select-Object -First 1
 
-					# if there was a match, post it to the server
+					# If there was a match, post it to the server
 					if ( "$ReplayFile" ) {
 						Write-Output "Detected new replay file: $($ReplayFile.FullName)" | LogLine
 						Write-Output "Uploading replay file to HotsApi and HotsLogs... " | LogLine
-						$Result = Invoke-MultiPart -Uri "http://hotsapi.net/api/v1/upload?uploadToHotslogs=1" -Field "file" -Path $ReplayFile.FullName
-						Write-Output $Result.Result | LogLine
+						Invoke-MultiPart -Uri "http://hotsapi.net/api/v1/upload?uploadToHotslogs=1" -Field "file" -Path $ReplayFile.FullName > $TmpFile
+						cat $TmpFile | LogLine
 						
+						# Notify of completion and upload status
+						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/complete/$RandID" -Field "upload" -Path $TmpFile.FullName
+						Write-Output $Result.Result | LogLine
+									
 						# Audible notification when complete
 						Play-Sound -Status "SUCCESS"
 					} else {
+						# notify of completion
+						$Result = Invoke-RestMethod -Uri "https://heroesshare.net/lives/complete/$RandId"
+						
 						Write-Output "Unable to locate replay file for recent live game!" | LogLine
 						Play-Sound -Status "FAILURE"
 					}
-					
-					# notify of completion
-					$Result = Invoke-RestMethod -Uri "https://heroesshare.net/lives/complete/$RandId"
-					
+										
 					# clean up and pass back to main watch loop
 					Remove-Item -Force "$TmpFile"
 					$LobbyFile = ""
