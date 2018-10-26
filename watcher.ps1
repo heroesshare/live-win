@@ -44,8 +44,8 @@ Function Invoke-MultiPart {
 Function Play-Sound {
 	Param ([string] $Status)
 	
-	# Check for disabled sound preference
-	if ( Test-Path "$AppDir\DisableSound" -PathType Leaf ) {
+	# Check for sound preference
+	if ( -not (Test-Path "$AppDir\EnableSound.txt" -PathType Leaf) ) {
 		return $True
 	}
 
