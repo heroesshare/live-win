@@ -316,12 +316,12 @@ while($true) {
 					# If there was a match, post it to the server
 					if ( "$ReplayFile" ) {
 						Write-Output "Detected new replay file: $($ReplayFile.FullName)" | LogLine
-						Write-Output "Uploading replay file to HotsApi and HotsLogs... " | LogLine
-						Invoke-MultiPart -Uri "http://hotsapi.net/api/v1/upload?uploadToHotslogs=1" -Field "file" -Path $ReplayFile.FullName > $TmpFile
-						cat $TmpFile | LogLine
+						Write-Output "Uploading replay file (includes HotsApi and HotsLogs)... " | LogLine
+						#Invoke-MultiPart -Uri "http://hotsapi.net/api/v1/upload?uploadToHotslogs=1" -Field "file" -Path $ReplayFile.FullName > $TmpFile
+						#cat $TmpFile | LogLine
 						
 						# Notify of completion and upload status
-						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/complete/$RandID" -Field "upload" -Path $TmpFile.FullName
+						$Result = Invoke-MultiPart -Uri "https://heroesshare.net/lives/complete/$RandID" -Field "upload" -Path $ReplayFile.FullName
 						Write-Output $Result.Result | LogLine
 									
 						# Audible notification when complete
