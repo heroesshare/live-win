@@ -89,9 +89,9 @@ if __name__ == '__main__':
     baseBuild = header['m_version']['m_baseBuild']
     try:
         protocol = __import__('protocol%s' % (baseBuild,))
+    # Fall back to the last known protocol
     except:
-        print >> sys.stderr, 'Unsupported base build: %d' % baseBuild
-        sys.exit(1)
+        protocol = __import__('protocol71449')
 
     # Print protocol details
     if args.details:
