@@ -91,7 +91,7 @@ if __name__ == '__main__':
         protocol = __import__('protocol%s' % (baseBuild,))
     # Fall back to the last known protocol
     except:
-        protocol = __import__('protocol71449')
+        protocol = __import__('protocol72191')
 
     # Print protocol details
     if args.details:
